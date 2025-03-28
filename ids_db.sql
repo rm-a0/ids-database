@@ -1,6 +1,6 @@
--------------------
+------------------
 -- DROP TABLES --
--------------------
+------------------
 BEGIN
     EXECUTE IMMEDIATE 'DROP TABLE "InvoiceContains" CASCADE CONSTRAINTS';
 EXCEPTION
@@ -77,6 +77,7 @@ DROP SEQUENCE "store_seq";
 DROP SEQUENCE "cash_reg_seq";
 DROP SEQUENCE "invoice_seq";
 DROP SEQUENCE "person_seq";
+
 -------------------
 -- CREATE TABLES --
 -------------------
@@ -178,9 +179,9 @@ CREATE TABLE "Operates" (
     CONSTRAINT "FK_Operates_CashRegister" FOREIGN KEY ("cash_register_id") REFERENCES "CashRegister" ("id") ON DELETE CASCADE
 );
 
--------------------------
--- Auto-incrementing PKs
--------------------------
+---------------------------
+-- Auto-incrementing PKs --
+---------------------------
 CREATE SEQUENCE "product_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
 CREATE SEQUENCE "stock_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
 CREATE SEQUENCE "store_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
