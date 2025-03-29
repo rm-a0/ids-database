@@ -115,7 +115,7 @@ CREATE TABLE "Person" (
     -- shared attributes
     "id" NUMBER CONSTRAINT "PK_Person" PRIMARY KEY,
     "name" VARCHAR2(100) CONSTRAINT "Person_name_nn" NOT NULL,
-    "contact" VARCHAR2(100) CONSTRAINT "Person_contact_check" CHECK (REGEXP_LIKE("contact", '^+[0-9]{12}$')),
+    "contact" VARCHAR2(100) CONSTRAINT "Person_contact_check" CHECK (REGEXP_LIKE("contact", '^\+[0-9]{12}$')),
     -- Determines type of Person (customer | employee)
     "type" VARCHAR2(100) CONSTRAINT "Person_type_nn" NOT NULL,
     -- customer attributes
@@ -220,3 +220,70 @@ CREATE SEQUENCE "store_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
 CREATE SEQUENCE "cash_reg_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
 CREATE SEQUENCE "invoice_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
 CREATE SEQUENCE "person_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
+
+--------------------------
+-- Insert Data into Tables --
+--------------------------
+
+-- Insert Data into Product
+INSERT INTO "Product" ("id", "name", "price", "weight", "size") 
+    VALUES ("product_seq".NEXTVAL, 'Laptop', 999.99, 2.50, '35x25x3cm');
+INSERT INTO "Product" ("id", "name", "price", "weight", "size") 
+    VALUES ("product_seq".NEXTVAL, 'Smartphone', 499.99, 0.20, '15x8x8cm');
+INSERT INTO "Product" ("id", "name", "price", "weight", "size") 
+    VALUES ("product_seq".NEXTVAL, 'Tablet', 299.99, 0.50, '24x16x7cm');
+
+-- Insert Data into Stock
+INSERT INTO "Stock" ("id", "location") VALUES ("stock_seq".NEXTVAL, 'Warehouse A');
+INSERT INTO "Stock" ("id", "location") VALUES ("stock_seq".NEXTVAL, 'Warehouse B');
+
+-- Insert Data into Store
+INSERT INTO "Store" ("id", "location") VALUES ("store_seq".NEXTVAL, 'Store A, Downtown');
+INSERT INTO "Store" ("id", "location") VALUES ("store_seq".NEXTVAL, 'Store B, Uptown');
+
+-- Insert Data into CashRegister
+INSERT INTO "CashRegister" ("id", "store_id") VALUES ("cash_reg_seq".NEXTVAL, 1);
+INSERT INTO "CashRegister" ("id", "store_id") VALUES ("cash_reg_seq".NEXTVAL, 2);
+
+-- Insert Data into Person (Customer and Employee)
+-- Customer
+INSERT INTO "Person" ("id", "name", "contact", "type", "email", "password") 
+    VALUES ("person_seq".NEXTVAL, 'John Doe', '+123456789012', 'customer', 'john.doe@gmail.com', 'password123');
+INSERT INTO "Person" ("id", "name", "contact", "type", "email", "password") 
+    VALUES ("person_seq".NEXTVAL, 'Jane Smith', '+987654321098', 'customer', 'jane.smith@gmail.com', 'password456');
+
+-- Employee
+INSERT INTO "Person" ("id", "name", "contact", "type", "role", "salary") 
+    VALUES ("person_seq".NEXTVAL, 'Alice Johnson', '+555123456789', 'employee', 'Cashier', '15.00€');
+INSERT INTO "Person" ("id", "name", "contact", "type", "role", "salary") 
+    VALUES ("person_seq".NEXTVAL, 'Bob Brown', '+555987654321', 'employee', 'Manager', '25.00€');
+
+-- Insert Data into Invoice
+INSERT INTO "Invoice" ("id", "time", "date", "type", "person_id", "status", "address", "cash_register_id") 
+    VALUES ("invoice_seq".NEXTVAL, '2025-03-28T12:30:00Z', '2025-03-28', 'sale', NULL, NULL, NULL, 1);
+INSERT INTO "Invoice" ("id", "time", "date", "type", "person_id", "status", "address", "cash_register_id") 
+    VALUES ("invoice_seq".NEXTVAL, '2025-03-28T14:00:00Z', '2025-03-28', 'order', 1, 'Pending', '456 Oak St', NULL);
+
+-- For StockContains
+INSERT INTO "StockContains" ("stock_id", "product_id", "quantity") 
+    VALUES (1, (SELECT "id" FROM "Product" WHERE "name" = 'Laptop'), 100);
+INSERT INTO "StockContains" ("stock_id", "product_id", "quantity") 
+    VALUES (1, (SELECT "id" FROM "Product" WHERE "name" = 'Smartphone'), 150);
+INSERT INTO "StockContains" ("stock_id", "product_id", "quantity") 
+    VALUES (2, (SELECT "id" FROM "Product" WHERE "name" = 'Tablet'), 200);
+
+-- Insert Data into StoreContains
+INSERT INTO "StoreContains" ("store_id", "product_id", "quantity") VALUES (1, 1, 50);
+INSERT INTO "StoreContains" ("store_id", "product_id", "quantity") VALUES (1, 2, 75);
+INSERT INTO "StoreContains" ("store_id", "product_id", "quantity") VALUES (2, 3, 100);
+
+-- Insert Data into InvoiceContains
+INSERT INTO "InvoiceContains" ("invoice_id", "product_id", "quantity") VALUES (1, 1, 1);
+INSERT INTO "InvoiceContains" ("invoice_id", "product_id", "quantity") VALUES (1, 2, 2);
+INSERT INTO "InvoiceContains" ("invoice_id", "product_id", "quantity") VALUES (2, 3, 1);
+
+-- Insert Data into Operates (Employee operates Cash Register)
+INSERT INTO "Operates" ("person_id", "cash_register_id", "start_time", "finish_time") 
+    VALUES (3, 1, '2025-03-28T08:00:00Z', '2025-03-28T16:00:00Z');
+INSERT INTO "Operates" ("person_id", "cash_register_id", "start_time", "finish_time") 
+    VALUES (4, 2, '2025-03-28T09:00:00Z', '2025-03-28T17:00:00Z');
