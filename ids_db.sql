@@ -88,7 +88,7 @@ CREATE TABLE "Product" (
     "name" VARCHAR2(100) CONSTRAINT "Product_name_nn" NOT NULL,
     "price" NUMBER(10,2) CONSTRAINT "Product_price_check" CHECK ("price" >= 0),
     "weight" NUMBER(10,2) CONSTRAINT "Product_weight_check" CHECK ("weight" >= 0),
-    "size" VARCHAR2(50)
+    "size" VARCHAR2(50) CONSTRAINT "Product_size_check" CHECK (REGEXP_LIKE("size", '^\d{1,10}x\d{1,10}x\d{1,10}(mm|cm|dm|m)$'))
 );
 
 -- Stock
@@ -110,30 +110,61 @@ CREATE TABLE "CashRegister" (
     CONSTRAINT "FK_CashRegister_Store" FOREIGN KEY ("store_id") REFERENCES "Store" ("id") ON DELETE CASCADE
 );
 
--- Person
+-- Person (merged customer and employee entities due to generalization)
 CREATE TABLE "Person" (
+    -- shared attributes
     "id" NUMBER CONSTRAINT "PK_Person" PRIMARY KEY,
     "name" VARCHAR2(100) CONSTRAINT "Person_name_nn" NOT NULL,
-    "contact" VARCHAR2(100),
-    "type" VARCHAR2(100),
-    "email" VARCHAR2(100),
+    "contact" VARCHAR2(100) CONSTRAINT "Person_contact_check" CHECK (REGEXP_LIKE("contact", '^+[0-9]{12}$')),
+    -- Determines type of Person (customer | employee)
+    "type" VARCHAR2(100) CONSTRAINT "Person_type_nn" NOT NULL,
+    -- customer attributes
+    "email" VARCHAR2(100) CONSTRAINT "Person_email_check" CHECK (REGEXP_LIKE("email", '^[A-Za-z0-9._%+-]+@gmail.com$')),
     "password" VARCHAR2(100),
+    -- employee attributes
     "role" VARCHAR2(100),
-    "salary" VARCHAR2(100)
+    "salary" VARCHAR2(100) CONSTRAINT "Person_salary_check" CHECK (REGEXP_LIKE("salary", '^[0-9]+\.[0-9]{2}€$')),
+    CONSTRAINT "Person_type_check" CHECK ("type" IN ('customer', 'employee')),
+
+     -- Constraints for Customer (email and password must be filled)
+     CONSTRAINT "Person_customer_check" CHECK (
+        ("type" = 'customer' AND "email" IS NOT NULL AND "password" IS NOT NULL) OR 
+        ("type" = 'employee' AND "email" IS NULL AND "password" IS NULL)
+    ),
+    -- Constraints for Employee (role and salary must be filled)
+    CONSTRAINT "Person_employee_check" CHECK (
+        ("type" = 'employee' AND "role" IS NOT NULL AND "salary" IS NOT NULL) OR 
+        ("type" = 'customer' AND "role" IS NULL AND "salary" IS NULL)
+    )
 );
 
--- Invoice (Now after Person & CashRegister exist)
+-- Invoice (Now after Person & CashRegister exist) (merged sale and order entities due to generalization)
 CREATE TABLE "Invoice" (
+    -- shared attributes
     "id" NUMBER CONSTRAINT "PK_Invoice" PRIMARY KEY,
     "time" VARCHAR2(100) CONSTRAINT "Invoice_time_nn" NOT NULL,
     "date" VARCHAR2(100) CONSTRAINT "Invoice_date_nn" NOT NULL,
     "type" VARCHAR2(100) CONSTRAINT "Invoice_type_nn" NOT NULL,
+    -- order attributes
     "person_id" NUMBER,
     "status" VARCHAR2(100),
     "address" VARCHAR2(100),
+    -- sale attribute
     "cash_register_id" NUMBER,
     CONSTRAINT "FK_Invoice_Person" FOREIGN KEY ("person_id") REFERENCES "Person" ("id") ON DELETE SET NULL,
-    CONSTRAINT "FK_Invoice_CashRegister" FOREIGN KEY ("cash_register_id") REFERENCES "CashRegister" ("id") ON DELETE SET NULL
+    CONSTRAINT "FK_Invoice_CashRegister" FOREIGN KEY ("cash_register_id") REFERENCES "CashRegister" ("id") ON DELETE SET NULL,
+    CONSTRAINT "Invoice_type_check" CHECK ("type" IN ('order', 'sale')),
+    
+    --Constraints for Order (person_id, status and address must be filled)
+    CONSTRAINT "Invoice_order_check" CHECK (
+        ("type" = 'order' AND "person_id" IS NOT NULL AND "status" IS NOT NULL AND "address" IS NOT NULL) OR 
+        ("type" = 'sale' AND "person_id" IS NULL AND "status" IS NULL AND "address" IS NULL)
+    ),
+    --Constraints for Sale (cash_register_id must be filled)
+    CONSTRAINT "Invoice_sale_check" CHECK (
+        ("type" = 'sale' AND "cash_register_id" IS NOT NULL) OR 
+        ("type" = 'order' AND "cash_register_id" IS NULL)
+    )
 );
 
 -- Junction Tables
@@ -172,8 +203,9 @@ CREATE TABLE "InvoiceContains" (
 CREATE TABLE "Operates" (
     "person_id" NUMBER,
     "cash_register_id" NUMBER,
-    "start_time" VARCHAR2(100),
-    "finish_time" VARCHAR2(100),
+    -- Time format: "YYYY-MM-DDTHH:mm:ssZ" -> T as a seperator between date and time. Z as "Zulu" (UTC+0)
+    "start_time" VARCHAR2(100) CONSTRAINT "Operates_start_time_check" CHECK (REGEXP_LIKE("start_time", '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$')),
+    "finish_time" VARCHAR2(100) CONSTRAINT "Operates_finish_time_check" CHECK (REGEXP_LIKE("finish_time", '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$')),
     CONSTRAINT "PK_Operates" PRIMARY KEY ("person_id", "cash_register_id"),
     CONSTRAINT "FK_Operates_Person" FOREIGN KEY ("person_id") REFERENCES "Person" ("id") ON DELETE CASCADE,
     CONSTRAINT "FK_Operates_CashRegister" FOREIGN KEY ("cash_register_id") REFERENCES "CashRegister" ("id") ON DELETE CASCADE
