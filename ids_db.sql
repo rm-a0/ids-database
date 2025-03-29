@@ -88,6 +88,7 @@ CREATE TABLE "Product" (
     "name" VARCHAR2(100) CONSTRAINT "Product_name_nn" NOT NULL,
     "price" NUMBER(10,2) CONSTRAINT "Product_price_check" CHECK ("price" >= 0),
     "weight" NUMBER(10,2) CONSTRAINT "Product_weight_check" CHECK ("weight" >= 0),
+    -- e.g 40x40x20cm
     "size" VARCHAR2(50) CONSTRAINT "Product_size_check" CHECK (REGEXP_LIKE("size", '^\d{1,10}x\d{1,10}x\d{1,10}(mm|cm|dm|m)$'))
 );
 
