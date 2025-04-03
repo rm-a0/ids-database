@@ -222,9 +222,9 @@ CREATE SEQUENCE "cash_reg_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
 CREATE SEQUENCE "invoice_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
 CREATE SEQUENCE "person_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
 
---------------------------
+-----------------------------
 -- Insert Data into Tables --
---------------------------
+-----------------------------
 
 -- Insert Data into Product
 INSERT INTO "Product" ("id", "name", "price", "weight", "size") 
