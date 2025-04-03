@@ -288,3 +288,58 @@ INSERT INTO "Operates" ("person_id", "cash_register_id", "start_time", "finish_t
     VALUES (3, 1, '2025-03-28T08:00:00Z', '2025-03-28T16:00:00Z');
 INSERT INTO "Operates" ("person_id", "cash_register_id", "start_time", "finish_time") 
     VALUES (4, 2, '2025-03-28T09:00:00Z', '2025-03-28T17:00:00Z');
+
+    ---------------------
+-- SELECT Queries --
+---------------------
+
+-- 1. Display products and their quantity in stock
+SELECT p."name", sc."quantity"
+FROM "Product" p
+JOIN "StockContains" sc ON p."id" = sc."product_id"
+WHERE sc."stock_id" = 1;
+
+-- Display employees and cash registers they operate
+SELECT p."name", cr."id" AS "cash_register_id"
+FROM "Person" p
+JOIN "Operates" o ON p."id" = o."person_id"
+JOIN "CashRegister" cr ON o."cash_register_id" = cr."id"
+WHERE p."type" = 'employee';
+
+-- Display invoices and cash registers with store locations where they were created
+SELECT i."id" AS "invoice_id", cr."id" AS "cash_register_id", s."location" AS "store_location"
+FROM "Invoice" i
+JOIN "CashRegister" cr ON i."cash_register_id" = cr."id"
+JOIN "Store" s ON cr."store_id" = s."id"
+WHERE i."type" = 'sale';
+
+-- Display all store locations and total quantity of products they contain
+SELECT s."location", SUM(sc."quantity") AS "total_quantity"
+FROM "Store" s
+JOIN "StoreContains" sc ON s."id" = sc."store_id"
+GROUP BY s."location";
+
+-- Display total numbers of products on each invoice
+SELECT ic."invoice_id", COUNT(ic."product_id") AS "item_count"
+FROM "InvoiceContains" ic
+GROUP BY ic."invoice_id";
+
+-- Find and display names and emails of all customers that have order
+SELECT p."name", p."email"
+FROM "Person" p
+WHERE p."type" = 'customer'
+AND EXISTS (
+    SELECT 1
+    FROM "Invoice" i
+    WHERE i."person_id" = p."id" AND i."type" = 'order'
+);
+
+-- Find and display all products and their price that are in stores containing registers
+SELECT p."name", p."price"
+FROM "Product" p
+WHERE p."id" IN (
+    SELECT sc."product_id"
+    FROM "StoreContains" sc
+    JOIN "Store" s ON sc."store_id" = s."id"
+    JOIN "CashRegister" cr ON s."id" = cr."store_id"
+);
