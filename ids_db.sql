@@ -299,32 +299,32 @@ FROM "Product" p
 JOIN "StockContains" sc ON p."id" = sc."product_id"
 WHERE sc."stock_id" = 1;
 
--- Display employees and cash registers they operate
+-- 2. Display employees and cash registers they operate
 SELECT p."name", cr."id" AS "cash_register_id"
 FROM "Person" p
 JOIN "Operates" o ON p."id" = o."person_id"
 JOIN "CashRegister" cr ON o."cash_register_id" = cr."id"
 WHERE p."type" = 'employee';
 
--- Display invoices and cash registers with store locations where they were created
+-- 3. Display invoices and cash registers with store locations where they were created
 SELECT i."id" AS "invoice_id", cr."id" AS "cash_register_id", s."location" AS "store_location"
 FROM "Invoice" i
 JOIN "CashRegister" cr ON i."cash_register_id" = cr."id"
 JOIN "Store" s ON cr."store_id" = s."id"
 WHERE i."type" = 'sale';
 
--- Display all store locations and total quantity of products they contain
+-- 4. Display all store locations and total quantity of products they contain
 SELECT s."location", SUM(sc."quantity") AS "total_quantity"
 FROM "Store" s
 JOIN "StoreContains" sc ON s."id" = sc."store_id"
 GROUP BY s."location";
 
--- Display total numbers of products on each invoice
+-- 5. Display total numbers of products on each invoice
 SELECT ic."invoice_id", COUNT(ic."product_id") AS "item_count"
 FROM "InvoiceContains" ic
 GROUP BY ic."invoice_id";
 
--- Find and display names and emails of all customers that have order
+-- 6. Find and display names and emails of all customers that have order
 SELECT p."name", p."email"
 FROM "Person" p
 WHERE p."type" = 'customer'
@@ -334,7 +334,7 @@ AND EXISTS (
     WHERE i."person_id" = p."id" AND i."type" = 'order'
 );
 
--- Find and display all products and their price that are in stores containing registers
+-- 7. Find and display all products and their price that are in stores containing registers
 SELECT p."name", p."price"
 FROM "Product" p
 WHERE p."id" IN (
