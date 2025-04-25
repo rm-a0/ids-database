@@ -1,7 +1,7 @@
 .*log
 .env
-./app/bin
-./app/obj
+/app/bin
+/app/obj
 appsettings.json
 appsettings.Development.json
 
