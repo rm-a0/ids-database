@@ -1,1 +1,44 @@
 .*log
+.env
+./app/bin
+./app/obj
+appsettings.json
+appsettings.Development.json
+
+# Ignore build and output directories
+/bin/
+/obj/
+/out/
+
+/# Ignore .NET-specific files
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.dll
+*.pdb
+*.exe
+*.vscode/
+.vscode/
+
+# Ignore environment variable file (for sensitive information)
+.env
+
+# Ignore .NET-specific configuration files
+appsettings.json
+appsettings.Development.json
+
+# Ignore NuGet package files
+*.nupkg
+.nuget/
+
+# Ignore IDE specific files
+.idea/
+/.vscode/
+
+# Ignore user-specific files (e.g., macOS, Windows, Linux)
+.DS_Store
+Thumbs.db
+
+# Ignore backup files
+*~
