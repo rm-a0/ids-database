@@ -289,7 +289,7 @@ INSERT INTO "Operates" ("person_id", "cash_register_id", "start_time", "finish_t
 INSERT INTO "Operates" ("person_id", "cash_register_id", "start_time", "finish_time") 
     VALUES (4, 2, '2025-03-28T09:00:00Z', '2025-03-28T17:00:00Z');
 
-    ---------------------
+---------------------
 -- SELECT Queries --
 ---------------------
 
@@ -343,3 +343,391 @@ WHERE p."id" IN (
     JOIN "Store" s ON sc."store_id" = s."id"
     JOIN "CashRegister" cr ON s."id" = cr."store_id"
 );
+
+------------------------------------
+-- SQL Script for Retail Database --
+------------------------------------
+
+SET SERVEROUTPUT ON;
+
+--------------------------
+-- 1. Database Triggers --
+--------------------------
+
+-- Trigger 1: Update stock quantity when an invoice is created (for sales)
+CREATE OR REPLACE TRIGGER "UpdateStockOnSale"
+AFTER INSERT ON "InvoiceContains"
+FOR EACH ROW
+DECLARE
+    v_store_id NUMBER;
+    v_quantity NUMBER;
+BEGIN
+    -- Find the store associated with the invoice's cash register
+    SELECT cr."store_id"
+    INTO v_store_id
+    FROM "Invoice" i
+    JOIN "CashRegister" cr ON i."cash_register_id" = cr."id"
+    WHERE i."id" = :NEW."invoice_id" AND i."type" = 'sale';
+
+    -- Check if enough stock exists in the store
+    SELECT "quantity"
+    INTO v_quantity
+    FROM "StoreContains"
+    WHERE "store_id" = v_store_id AND "product_id" = :NEW."product_id"
+    FOR UPDATE;
+
+    IF v_quantity < :NEW."quantity" THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Insufficient stock for product ID ' || :NEW."product_id" || ' in store ID ' || v_store_id);
+    END IF;
+
+    -- Update store stock
+    UPDATE "StoreContains"
+    SET "quantity" = "quantity" - :NEW."quantity"
+    WHERE "store_id" = v_store_id AND "product_id" = :NEW."product_id";
+
+    DBMS_OUTPUT.PUT_LINE('Stock updated for product ID ' || :NEW."product_id" || ' in store ID ' || v_store_id);
+END;
+/
+
+-- Trigger 2: Log employee operations on cash registers
+CREATE OR REPLACE TRIGGER "LogCashRegisterOperation"
+AFTER INSERT OR UPDATE ON "Operates"
+FOR EACH ROW
+DECLARE
+    v_action VARCHAR2(50);
+BEGIN
+    IF INSERTING THEN
+        v_action := 'Started operating';
+    ELSIF UPDATING THEN
+        v_action := 'Updated operation';
+    END IF;
+
+    INSERT INTO "OperationLog" (
+        "log_id",
+        "person_id",
+        "cash_register_id",
+        "action",
+        "log_time"
+    ) VALUES (
+        "operation_log_seq".NEXTVAL,
+        :NEW."person_id",
+        :NEW."cash_register_id",
+        v_action || ' at ' || :NEW."start_time",
+        SYSTIMESTAMP
+    );
+
+    DBMS_OUTPUT.PUT_LINE('Logged operation for person ID ' || :NEW."person_id" || ' on cash register ID ' || :NEW."cash_register_id");
+END;
+/
+
+-- Create OperationLog table and sequence for the trigger
+CREATE SEQUENCE "operation_log_seq" START WITH 1 INCREMENT BY 1 NOCACHE;
+
+CREATE TABLE "OperationLog" (
+    "log_id" NUMBER CONSTRAINT "PK_OperationLog" PRIMARY KEY,
+    "person_id" NUMBER,
+    "cash_register_id" NUMBER,
+    "action" VARCHAR2(200),
+    "log_time" TIMESTAMP,
+    CONSTRAINT "FK_OperationLog_Person" FOREIGN KEY ("person_id") REFERENCES "Person" ("id") ON DELETE SET NULL,
+    CONSTRAINT "FK_OperationLog_CashRegister" FOREIGN KEY ("cash_register_id") REFERENCES "CashRegister" ("id") ON DELETE SET NULL
+);
+
+--------------------------
+-- 2. Stored Procedures --
+--------------------------
+
+-- Procedure 1: Process a new sale with cursor and exception handling
+CREATE OR REPLACE PROCEDURE "ProcessSale" (
+    p_cash_register_id IN "CashRegister"."id"%TYPE,
+    p_employee_id IN "Person"."id"%TYPE,
+    p_products IN SYS.ODCINUMBERLIST
+) AS
+    CURSOR product_cursor IS
+        SELECT "id", "price"
+        FROM "Product"
+        WHERE "id" IN (SELECT COLUMN_VALUE FROM TABLE(p_products));
+    
+    v_invoice_id "Invoice"."id"%TYPE;
+    v_total_price NUMBER(10,2) := 0;
+    v_product_row "Product"%ROWTYPE;
+BEGIN
+    -- Start transaction
+    SAVEPOINT start_sale;
+
+    -- Create new invoice
+    INSERT INTO "Invoice" (
+        "id", "time", "date", "type", "cash_register_id"
+    ) VALUES (
+        "invoice_seq".NEXTVAL,
+        TO_CHAR(SYSDATE, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        TO_CHAR(SYSDATE, 'YYYY-MM-DD'),
+        'sale',
+        p_cash_register_id
+    ) RETURNING "id" INTO v_invoice_id;
+
+    -- Process products using cursor
+    FOR product_rec IN product_cursor LOOP
+        v_total_price := v_total_price + product_rec."price";
+        
+        INSERT INTO "InvoiceContains" (
+            "invoice_id", "product_id", "quantity"
+        ) VALUES (
+            v_invoice_id, product_rec."id", 1
+        );
+    END LOOP;
+
+    -- Log operation
+    UPDATE "Operates"
+    SET "finish_time" = TO_CHAR(SYSDATE, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    WHERE "person_id" = p_employee_id 
+    AND "cash_register_id" = p_cash_register_id;
+
+    DBMS_OUTPUT.PUT_LINE('Sale processed. Invoice ID: ' || v_invoice_id || ', Total: ' || v_total_price);
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        ROLLBACK TO start_sale;
+        DBMS_OUTPUT.PUT_LINE('Error: Invalid product or cash register ID');
+        RAISE_APPLICATION_ERROR(-20002, 'Invalid product or cash register ID');
+    WHEN OTHERS THEN
+        ROLLBACK TO start_sale;
+        DBMS_OUTPUT.PUT_LINE('Error in ProcessSale: ' || SQLERRM);
+        RAISE;
+END;
+/
+
+-- Procedure 2: Generate stock report with %TYPE and exception handling
+CREATE OR REPLACE PROCEDURE "GenerateStockReport" (
+    p_stock_id IN "Stock"."id"%TYPE
+) AS
+    v_product_name "Product"."name"%TYPE;
+    v_quantity "StockContains"."quantity"%TYPE;
+    v_total_value NUMBER(10,2) := 0;
+    
+    CURSOR stock_cursor IS
+        SELECT p."name", sc."quantity", p."price"
+        FROM "StockContains" sc
+        JOIN "Product" p ON sc."product_id" = p."id"
+        WHERE sc."stock_id" = p_stock_id;
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('Stock Report for Stock ID: ' || p_stock_id);
+    DBMS_OUTPUT.PUT_LINE('----------------------------------');
+
+    -- Open cursor and process stock
+    FOR stock_rec IN stock_cursor LOOP
+        v_product_name := stock_rec."name";
+        v_quantity := stock_rec."quantity";
+        v_total_value := v_total_value + (stock_rec."quantity" * stock_rec."price");
+
+        DBMS_OUTPUT.PUT_LINE('Product: ' || v_product_name || 
+                            ', Quantity: ' || v_quantity || 
+                            ', Value: ' || (v_quantity * stock_rec."price"));
+    END LOOP;
+
+    DBMS_OUTPUT.PUT_LINE('----------------------------------');
+    DBMS_OUTPUT.PUT_LINE('Total Value: ' || v_total_value);
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('No products found in stock ID ' || p_stock_id);
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error in GenerateStockReport: ' || SQLERRM);
+        RAISE;
+END;
+/
+
+----------------------------------------
+-- 3. Index Creation and EXPLAIN PLAN --
+----------------------------------------
+
+-- Create index to optimize product searches by name
+CREATE INDEX "IDX_Product_Name" ON "Product" ("name");
+
+-- EXPLAIN PLAN for query without index optimization
+EXPLAIN PLAN FOR
+SELECT s."location", SUM(sc."quantity") AS "total_quantity", COUNT(DISTINCT sc."product_id") AS "product_types"
+FROM "Store" s
+JOIN "StoreContains" sc ON s."id" = sc."store_id"
+JOIN "Product" p ON sc."product_id" = p."id"
+WHERE p."name" LIKE 'Laptop%'
+GROUP BY s."location";
+
+-- Display plan
+SELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY());
+
+-- Create index to optimize the above query
+CREATE INDEX "IDX_StoreContains_Product" ON "StoreContains" ("product_id", "store_id");
+
+-- Re-run EXPLAIN PLAN after index creation
+EXPLAIN PLAN FOR
+SELECT s."location", SUM(sc."quantity") AS "total_quantity", COUNT(DISTINCT sc."product_id") AS "product_types"
+FROM "Store" s
+JOIN "StoreContains" sc ON s."id" = sc."store_id"
+JOIN "Product" p ON sc."product_id" = p."id"
+WHERE p."name" LIKE 'Laptop%'
+GROUP BY s."location";
+
+-- Display plan
+SELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY());
+
+----------------------
+-- 4. Access Rights --
+----------------------
+
+-- Grant permissions to second team member (user 'xrepcim00')
+GRANT SELECT, INSERT, UPDATE ON "Product" TO xrepcim00;
+GRANT SELECT, INSERT, UPDATE ON "Store" TO xrepcim00;
+GRANT SELECT, INSERT, UPDATE ON "StoreContains" TO xrepcim00;
+GRANT SELECT ON "Invoice" TO xrepcim00;
+GRANT SELECT ON "InvoiceContains" TO xrepcim00;
+GRANT EXECUTE ON "ProcessSale" TO xrepcim00;
+GRANT EXECUTE ON "GenerateStockReport" TO xrepcim00;
+
+--------------------------
+-- 5. Materialized View --
+--------------------------
+
+-- Create materialized view for xrepcim00 to track store inventory
+CREATE MATERIALIZED VIEW "StoreInventory_MV"
+BUILD IMMEDIATE
+REFRESH FAST ON COMMIT
+AS
+SELECT s."id" AS "store_id", s."location", p."id" AS "product_id", p."name", sc."quantity"
+FROM "Store" s
+JOIN "StoreContains" sc ON s."id" = sc."store_id"
+JOIN "Product" p ON sc."product_id" = p."id";
+
+-- Grant permissions to xrepcim00
+GRANT SELECT, INSERT, ALTER, DELETE ON "StoreInventory_MV" TO xrepcim00;
+
+------------------------------------------
+-- 6. Complex SELECT with WITH and CASE --
+------------------------------------------
+
+-- Query to analyze sales performance by store
+-- Description: Retrieves total sales value per store, categorizing stores as 'High', 'Medium', or 'Low' performing based on sales value
+SELECT 
+    store_sales."store_id",
+    store_sales."location",
+    store_sales."total_sales",
+    CASE 
+        WHEN store_sales."total_sales" > 1000 THEN 'High'
+        WHEN store_sales."total_sales" BETWEEN 500 AND 1000 THEN 'Medium'
+        ELSE 'Low'
+    END AS "performance_category"
+FROM (
+    WITH SalesData AS (
+        SELECT 
+            s."id" AS "store_id",
+            s."location",
+            SUM(p."price" * ic."quantity") AS "total_sales"
+        FROM "Store" s
+        JOIN "CashRegister" cr ON s."id" = cr."store_id"
+        JOIN "Invoice" i ON cr."id" = i."cash_register_id"
+        JOIN "InvoiceContains" ic ON i."id" = ic."invoice_id"
+        JOIN "Product" p ON ic."product_id" = p."id"
+        WHERE i."type" = 'sale'
+        GROUP BY s."id", s."location"
+    )
+    SELECT * FROM SalesData
+) store_sales
+ORDER BY store_sales."total_sales" DESC;
+
+-------------------------------------------------
+-- 7. Demonstration of Triggers and Procedures --
+-------------------------------------------------
+
+-- Demonstrate Trigger 1: UpdateStockOnSale
+INSERT INTO "Invoice" (
+    "id", "time", "date", "type", "cash_register_id"
+) VALUES (
+    "invoice_seq".NEXTVAL,
+    '2025-03-29T10:00:00Z',
+    '2025-03-29',
+    'sale',
+    1
+) RETURNING "id" INTO v_invoice_id;
+
+INSERT INTO "InvoiceContains" (
+    "invoice_id", "product_id", "quantity"
+) VALUES (
+    v_invoice_id,
+    (SELECT "id" FROM "Product" WHERE "name" = 'Laptop'),
+    5
+);
+
+-- Check stock reduction
+SELECT "quantity"
+FROM "StoreContains"
+WHERE "store_id" = 1 AND "product_id" = (SELECT "id" FROM "Product" WHERE "name" = 'Laptop');
+
+-- Demonstrate Trigger 2: LogCashRegisterOperation
+INSERT INTO "Operates" (
+    "person_id", "cash_register_id", "start_time", "finish_time"
+) VALUES (
+    3,
+    1,
+    '2025-03-29T08:00:00Z',
+    '2025-03-29T16:00:00Z'
+);
+
+-- Check log
+SELECT * FROM "OperationLog";
+
+-- Demonstrate Procedure 1: ProcessSale
+BEGIN
+    "ProcessSale"(
+        p_cash_register_id => 1,
+        p_employee_id => 3,
+        p_products => SYS.ODCINUMBERLIST(1, 2)
+    );
+END;
+/
+
+-- Demonstrate Procedure 2: GenerateStockReport
+BEGIN
+    "GenerateStockReport"(p_stock_id => 1);
+END;
+/
+
+---------------------------------
+-- 8. Transactional Processing --
+---------------------------------
+
+-- Demonstrate atomicity with concurrent stock updates
+DECLARE
+    v_product_id "Product"."id"%TYPE;
+BEGIN
+    -- Select product ID for Laptop
+    SELECT "id" INTO v_product_id
+    FROM "Product"
+    WHERE "name" = 'Laptop';
+
+    -- Start transaction
+    SAVEPOINT start_transaction;
+
+    -- Lock store contains for update
+    UPDATE "StoreContains"
+    SET "quantity" = "quantity" - 10
+    WHERE "store_id" = 1 AND "product_id" = v_product_id;
+
+    -- Simulate delay to show locking
+    DBMS_LOCK.SLEEP(5);
+
+    -- Update stock
+    UPDATE "StockContains"
+    SET "quantity" = "quantity" - 10
+    WHERE "stock_id" = 1 AND "product_id" = v_product_id;
+
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Transaction completed successfully');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK TO start_transaction;
+        DBMS_OUTPUT.PUT_LINE('Transaction failed: ' || SQLERRM);
+END;
+/
+
+-- Query to verify materialized view
+SELECT * FROM "StoreInventory_MV" WHERE "quantity" > 50;
