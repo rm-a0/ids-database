@@ -4,11 +4,14 @@ SET SERVEROUTPUT ON;
 -- Materialized View --
 --------------------------
 
+-- Drop the materialized view before testing
+DROP MATERIALIZED VIEW "StoreInventory_MV";
+
 -- Create materialized view as xvesela00
 -- Execute as xvesela00
 CREATE MATERIALIZED VIEW "StoreInventory_MV"
 BUILD IMMEDIATE
-REFRESH FAST ON COMMIT
+REFRESH COMPLETE ON DEMAND
 AS
 SELECT s."id" AS "store_id", s."location", p."id" AS "product_id", p."name", sc."quantity"
 FROM xrepcim00."Store" s
@@ -120,8 +123,6 @@ BEGIN
     SET "quantity" = "quantity" - 10
     WHERE "store_id" = 1 AND "product_id" = v_product_id;
 
-    DBMS_LOCK.SLEEP(5);
-
     UPDATE "StockContains"
     SET "quantity" = "quantity" - 10
     WHERE "stock_id" = 1 AND "product_id" = v_product_id;
@@ -135,5 +136,16 @@ EXCEPTION
 END;
 /
 
+-- Refresh materialized view manually
+BEGIN
+    DBMS_MVIEW.REFRESH('StoreInventory_MV');
+END;
+/
+
 -- Test Materialized View (execute as xvesela00)
 SELECT * FROM "StoreInventory_MV" WHERE "quantity" > 50;
+SELECT * FROM "Operates";
+
+-- Test Procedures (execute as xvesela00)
+CALL xrepcim00."ProcessSale"(1, 3, SYS.ODCINUMBERLIST(1, 2));
+CALL xrepcim00."GenerateStockReport"(1);
