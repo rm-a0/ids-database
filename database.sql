@@ -280,9 +280,64 @@ VALUES (3, 1, '2025-03-28T08:00:00Z', '2025-03-28T16:00:00Z');
 INSERT INTO "Operates" ("person_id", "cash_register_id", "start_time", "finish_time") 
 VALUES (4, 2, '2025-03-28T09:00:00Z', '2025-03-28T17:00:00Z');
 
---------------------------
+--------------------
+-- SELECT Queries --
+--------------------
+
+-- 1. Display products and their quantity in stock
+SELECT p."name", sc."quantity"
+FROM "Product" p
+JOIN "StockContains" sc ON p."id" = sc."product_id"
+WHERE sc."stock_id" = 1;
+
+-- 2. Display employees and cash registers they operate
+SELECT p."name", cr."id" AS "cash_register_id"
+FROM "Person" p
+JOIN "Operates" o ON p."id" = o."person_id"
+JOIN "CashRegister" cr ON o."cash_register_id" = cr."id"
+WHERE p."type" = 'employee';
+
+-- 3. Display invoices and cash registers with store locations where they were created
+SELECT i."id" AS "invoice_id", cr."id" AS "cash_register_id", s."location" AS "store_location"
+FROM "Invoice" i
+JOIN "CashRegister" cr ON i."cash_register_id" = cr."id"
+JOIN "Store" s ON cr."store_id" = s."id"
+WHERE i."type" = 'sale';
+
+-- 4. Display all store locations and total quantity of products they contain
+SELECT s."location", SUM(sc."quantity") AS "total_quantity"
+FROM "Store" s
+JOIN "StoreContains" sc ON s."id" = sc."store_id"
+GROUP BY s."location";
+
+-- 5. Display total numbers of products on each invoice
+SELECT ic."invoice_id", COUNT(ic."product_id") AS "item_count"
+FROM "InvoiceContains" ic
+GROUP BY ic."invoice_id";
+
+-- 6. Find and display names and emails of all customers that have order
+SELECT p."name", p."email"
+FROM "Person" p
+WHERE p."type" = 'customer'
+AND EXISTS (
+    SELECT 1
+    FROM "Invoice" i
+    WHERE i."person_id" = p."id" AND i."type" = 'order'
+);
+
+-- 7. Find and display all products and their price that are in stores containing registers
+SELECT p."name", p."price"
+FROM "Product" p
+WHERE p."id" IN (
+    SELECT sc."product_id"
+    FROM "StoreContains" sc
+    JOIN "Store" s ON sc."store_id" = s."id"
+    JOIN "CashRegister" cr ON s."id" = cr."store_id"
+);
+
+-----------------------
 -- Database Triggers --
---------------------------
+-----------------------
 
 -- Trigger 1: Update stock quantity when an invoice is created (for sales)
 CREATE OR REPLACE TRIGGER "UpdateStockOnSale"
@@ -338,9 +393,9 @@ BEGIN
 END;
 /
 
---------------------------
+-----------------------
 -- Stored Procedures --
---------------------------
+-----------------------
 
 -- Procedure 1: Process a new sale
 CREATE OR REPLACE PROCEDURE "ProcessSale" (
@@ -434,9 +489,9 @@ EXCEPTION
 END;
 /
 
-----------------------------------------
+-------------------------------------
 -- Index Creation and EXPLAIN PLAN --
-----------------------------------------
+-------------------------------------
 
 -- Index to optimize product searches by name
 CREATE INDEX "IDX_Product_Name" ON "Product" ("name");
@@ -464,18 +519,17 @@ WHERE p."name" LIKE 'Laptop%'
 GROUP BY s."location";
 SELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY());
 
---------------------------
+----------------------------
 -- Materialized View Logs --
---------------------------
+----------------------------
 -- Execute as xrepcim00
 CREATE MATERIALIZED VIEW LOG ON "Store" WITH PRIMARY KEY, ROWID ("location");
 CREATE MATERIALIZED VIEW LOG ON "StoreContains" WITH PRIMARY KEY, ROWID ("quantity");
 CREATE MATERIALIZED VIEW LOG ON "Product" WITH PRIMARY KEY, ROWID ("name");
 
---------------------------
+--------------------
 -- Access Rights --
---------------------------
-
+-------------------- 
 -- Grants for xrepcim00
 GRANT SELECT, INSERT, UPDATE ON "Product" TO xrepcim00;
 GRANT SELECT, INSERT, UPDATE ON "Store" TO xrepcim00;
@@ -506,3 +560,7 @@ GRANT ALL ON "person_seq" TO xvesela00;
 GRANT ALL ON "operation_log_seq" TO xvesela00;
 GRANT EXECUTE ON "ProcessSale" TO xvesela00;
 GRANT EXECUTE ON "GenerateStockReport" TO xvesela00;
+
+-- Try exec
+EXEC "ProcessSale"(1, 3, SYS.ODCINUMBERLIST(1, 2));
+EXEC "GenerateStockReport"(1);
