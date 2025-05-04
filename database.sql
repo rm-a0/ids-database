@@ -275,8 +275,8 @@ INSERT INTO "InvoiceContains" ("invoice_id", "product_id", "quantity") VALUES (1
 INSERT INTO "InvoiceContains" ("invoice_id", "product_id", "quantity") VALUES (2, 3, 1);
 
 -- Operates
-INSERT INTO "Operates" ("person_id", "cash_register_id", "start_time", "finish_time") 
-VALUES (3, 1, '2025-03-28T08:00:00Z', '2025-03-28T16:00:00Z');
+-- INSERT INTO "Operates" ("person_id", "cash_register_id", "start_time", "finish_time") 
+-- VALUES (3, 1, '2025-03-28T08:00:00Z', '2025-03-28T16:00:00Z');
 INSERT INTO "Operates" ("person_id", "cash_register_id", "start_time", "finish_time") 
 VALUES (4, 2, '2025-03-28T09:00:00Z', '2025-03-28T17:00:00Z');
 

@@ -137,15 +137,16 @@ END;
 /
 
 -- Refresh materialized view manually
-BEGIN
-    DBMS_MVIEW.REFRESH('StoreInventory_MV');
-END;
-/
+-- BEGIN
+--     DBMS_MVIEW.REFRESH('StoreInventory_MV');
+-- END;
+-- /
 
 -- Test Materialized View (execute as xvesela00)
 SELECT * FROM "StoreInventory_MV" WHERE "quantity" > 50;
 SELECT * FROM "Operates";
 
 -- Test Procedures (execute as xvesela00)
-CALL xrepcim00."ProcessSale"(1, 3, SYS.ODCINUMBERLIST(1, 2));
-CALL xrepcim00."GenerateStockReport"(1);
+-- Note: Run the procedures alone for it to work correctly, otherwise it lock up
+-- CALL xrepcim00."ProcessSale"(1, 3, SYS.ODCINUMBERLIST(1, 2));
+-- CALL xrepcim00."GenerateStockReport"(1);
