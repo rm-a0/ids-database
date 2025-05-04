@@ -1,7 +1,7 @@
 # Overview
 SQL script for a retail management database.
 
-# Entity Releationship Diargram
+# Entity Relationship Diargram
 ![erd-db](docs/ids_erd.jpg)
 
 # Use Case Diagram
