@@ -466,7 +466,7 @@ CREATE OR REPLACE PROCEDURE "GenerateStockReport" (
         WHERE sc."stock_id" = p_stock_id;
 BEGIN
     DBMS_OUTPUT.PUT_LINE('Stock Report for Stock ID: ' || p_stock_id);
-    DBMS_OUTPUT.PUT_LINE('----------------------------------');
+    DBMS_OUTPUT.PUT_LINE('---------------------------');
 
     FOR stock_rec IN stock_cursor LOOP
         v_product_name := stock_rec."name";
@@ -477,7 +477,7 @@ BEGIN
                             ', Value: ' || (v_quantity * stock_rec."price"));
     END LOOP;
 
-    DBMS_OUTPUT.PUT_LINE('----------------------------------');
+    DBMS_OUTPUT.PUT_LINE('---------------------------');
     DBMS_OUTPUT.PUT_LINE('Total Value: ' || v_total_value);
 
 EXCEPTION
