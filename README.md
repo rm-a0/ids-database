@@ -1,5 +1,6 @@
 # Overview
 SQL script for a retail management database.
+Evaluation: 34/34.
 
 # Entity Relationship Diargram
 ![erd-db](docs/ids_erd.jpg)
